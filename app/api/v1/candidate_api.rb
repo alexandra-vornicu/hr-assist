@@ -15,20 +15,30 @@ module V1
 
         clone_params = params.dup
 
-        if(params[:candidate_cv])
-          puts params[:candidate_cv].inspect
-          upload = ActionDispatch::Http::UploadedFile.new(
-              tempfile: params[:candidate_cv][:tempfile],
-              filename: params[:candidate_cv][:filename],
-              type:     params[:candidate_cv][:type],
-              headers:  params[:candidate_cv][:head],
-            )
+        clone_params[:candidate_cv] = convert_hashie_to_file(params[:candidate_cv]) if params[:candidate_cv]
 
-          clone_params[:candidate_cv] = upload
+        clone_params[:audio_files].each_with_index do |audio_file, index|
+            clone_params[:audio_files][index] = convert_hashie_to_file(audio_file)
         end
 
         ActionController::Parameters.new(clone_params).permit(:name, :university_start_year, :university_end_year, :projects, :category,
-          :contact_info, :comments, :status, :candidate_cv)
+          :contact_info, :comments, :status, :candidate_cv, :audio_files => [])
+      end
+
+      def convert_hashie_to_file(hashie)
+        ActionDispatch::Http::UploadedFile.new(
+              tempfile: hashie[:tempfile],
+              filename: hashie[:filename],
+              type:     hashie[:type],
+              headers:  hashie[:head],
+            )
+      end
+
+      def prepare_param param_obj, key, cv_file
+          if param_obj[key]
+            cv_file = param_obj[key]
+            param_obj.delete key
+          end  
       end
 
       params :pagination do
@@ -83,9 +93,22 @@ module V1
           model_params.delete :candidate_cv
         end        
 
+        if model_params[:audio_files]
+          audio_files = model_params[:audio_files]
+          model_params.delete :audio_files
+        end
+
         candidate = authorizeAndCreate(Candidate, model_params)
 
         candidate.candidate_cv = CandidateCv.create!(cv: cv_file) if candidate && cv_file
+
+        if(audio_files && audio_files.length > 0)
+            audio_files.each do |audio_file|
+              candidate.candidate_files << CandidateFile.create!(file: audio_file)
+            end
+        end
+
+        candidate
       end
 
       desc "Update candidate"
@@ -98,7 +121,7 @@ module V1
         optional :contact_info,           allow_blank: false, type: String
         optional :candidate_cv,                               type: File
         optional :comments,               allow_blank: false, type: String
-        optional :audio_files,            allow_blank: false, type: File
+        optional :audio_files,            allow_blank: false, type: [File]
         requires :status,                 allow_blank: false, type: Integer
       end
 
