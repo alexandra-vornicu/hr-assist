@@ -51,7 +51,7 @@ module APIHelpers
         :paginate => url_paginate(items, params[:per_page])
       }
     else
-      if relations.include?("languages")
+      if relations && relations.include?("languages")
         response_final = []
         response = {languages: []}
         model.all.each do |user|
